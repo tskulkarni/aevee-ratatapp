@@ -1,0 +1,5 @@
+Partner specific implementation code should live here.
+
+Keeping code out of the root directory of the repository will ease merging problems over time.
+
+The root Makefile includes a build.mk file from this directory if it exists.

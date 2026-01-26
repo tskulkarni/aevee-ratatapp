@@ -1,0 +1,221 @@
+1.1.38 (4/03/2020)
+- 5 second debounce on network status changes
+
+1.1.37 (2/04/2020)
+- Support RAAT__VOLUME_TYPE_HIDDEN_NUMBER for devices that have a volume number that is not user facing
+
+1.1.36 (4/02/2019)
+- ALSA output plugin: failures to set channel map are no longer considered fatal, to accommodate USB devices that don't support channel mapping
+
+1.1.35 (3/18/2019)
+- Remove subnet scanning from discovery protocol
+
+1.1.34 (2/25/2019)
+- Fixed a race condition in the blocking stream read implementation
+- Fixed a situation where an interrupted discovery cycle could cause a hang while shutting down a RAAT__Device
+- Fixed a small memory leak around connection management
+
+1.1.33 (11/30/2018)
+-  ALSA output plugin: 100ms sleep on format changes to work around XMOS USB chipset bug
+
+1.1.32 (09/02/2018)
+-  ALSA output plugin: support MQA conditionals for sync_offset_ns
+
+1.1.31 (07/09/2018)
+-  Make RC__now_us and RC__now_ns use the same clock reference. This prevents network timeouts when the system clock changes
+
+1.1.30 (05/18/2018)
+- ALSA Volume Plugin: use correct mute element 
+
+1.1.29 (03/22/2018)
+- Support toggle_mute in incremental volume mode
+
+1.1.28 (02/01/2018)
+- Remove MQA related test code in ALSA plugin
+
+1.1.27 (01/11/2018)
+- Fix a regression introduced in 1.1.24 that caused "set_mute" to crash.
+
+1.1.25 (01/11/2018)
+- Add support for devices that require runtime format support probing (currently this is just for iOS)
+- Add documentation for supporting MQA + Tilt controls in Signal Path to raat_docs.h
+- Merge changes from Roon 1.4 mainline
+- Fix audio artifacts that happened in conjunction with CoreAudio SRC on Macs
+
+1.1.24 (01/11/2018)
+- Add support for incremental (+/- buttons only) volume controls
+
+1.1.23 (09/19/2017)
+- Fix use of incorrect callback function while handling a crash within a RAAT client session
+
+1.1.22 (09/19/2017)
+- Use RL/RR instead of LLC/RLC for 5,6,7ch mappings. Only impacts multichannel devices
+
+1.1.21 (07/06/2017)
+- Fix a crash when output plugins exhibit unusual callback timing
+- Fix a race condition that can result in "hung" or partially responsive connections
+
+1.1.20 (06/28/2017)
+- Support for MQA information in RAAT__StreamFormat so that devices can know when they are about to receive an MQA stream
+
+1.1.19 (04/26/2017)
+- Added a "noalloc" option for reading TCP streams using luv
+- Disable FS access in luv/lua
+- Miscellaneous bug fixes related to CoreAudio/WASAPI
+- Support for DSD512/768k in non-ALSA backends
+
+1.1.18 (04/04/2017)
+- Fix a situation where stale data can be used in zone grouping slave situations
+
+1.1.17 (03/17/2017)
+- Fix a discovery-related crash when processing multiple network status updates in rapid succession
+
+1.1.16 (03/09/2017)
+- Fix a situation where stale data can be used in zone grouping slave situations
+
+1.1.15 (02/15/2017)
+- Fix RAAT__device_stop hanging in network interface watching code
+
+1.1.14 (01/19/2017)
+- Improvements to drift correction algorithm to make situations with larger clock rate differences tractable
+- Added an option for the "null" output that allows it to emulate arbitrary clock rates for testing of drift correction
+- Added an 'exit' command to raatool to help with testing crash/restart behavior
+- Bugfixes for WASAPI, CoreAudio, ASIO output plugins and WASAPI volume plugin (merged from Roon 1.3 development)
+
+1.1.13 (01/12/2017)
+- Support for tracking the types of connected clients
+
+1.1.12 (01/02/2017)
+- Performance optimizations geared towards reducing heap activity during audio streaming
+
+1.1.11 (12/16/2016)
+- Improved management of discovery behavior when network interfaces go up and down on Linux
+
+1.1.10 (11/16/2016)
+- RAAT__stream supports channel mapping so that multi-channel playback can be efficient even when sending blank channels
+- Stop inadvertently setting the device format durring non-exclusive-mode CoreAudio (Mac) playback
+- Fix rapid-fire volume/mute commands for WASAPI (windows) volume plugin, since they confuse some drivers
+- Fix deadlock + crash in ASIO (windows) output plugin
+- Fix a bug that prevented DSD_MODE_NONE from working properly under some circumstances in the WASAPI (windows) output plugin 
+
+1.1.9 (10/21/2016)
+- Add support for auto_name in info dict
+
+1.1.8 (9/30/2016)
+- Sweep for memory leaks
+- ALSA Output plugin adds support for special situations where ALSA devices aren't around at RAAT startup (not for external USB devices)
+
+1.1.7 (9/8/2016)
+- Fix regression in recent RAAT__Stream fix
+
+1.1.6 (9/8/2016)
+- Fix regression in recent RAAT__Stream optimizations 
+
+1.1.5 (9/1/2016)
+- Fix ALSA buffer size computation
+
+1.1.4 (8/23/2016)
+- Memory pooling in RAAT__Stream to reduce malloc heap usage
+- Optimized luv's UDP receiver to avoid address parsing/conversion overhead
+- Optimized luv's UDP receiver to avoid creating unneeded options dictionaries
+- Added moving average to drift correction algorithm to smooth out poor network connections
+
+1.1.3 (8/22/2016)
+- Optimized duplicate packet detection in raat_stream.c
+
+1.1.2 (7/28/2016)
+- Fixed a memory leak in raat_discovery.c
+
+1.1.1 (6/24/2016)
+- Fixed two memory leaks in raat_session.c
+
+1.1.0 (6/1/2016)
+- Backported all RAAT changes that were made for Roon's 1.2 release into the SDK
+- Fixed an error in the sample stuff/drop implementation that could cause audible artifacts during drift compensation corrections
+- ALSA output: for devices that only support >2 channel output, zero-fill the remaining channels
+- Support get_output_delay on outputs to avoid clipping content at stream start on devices with unusually long delays
+- ALSA output: Add some extra retries to work around issues with certain USB devices.
+- ALSA output: report PCM support up to 1411200hz and DSD support up to DSD1024 if the ALSA device supports it. 
+- ALSA output: support for up to 10 output channels
+- ALSA output: prefers larger DSD sample formats to smaller ones
+- Resource management should be significantly more robust if destroying and re-creating RAAT__Device instances without resarting the process.
+- ALSA volume plugin is somewhat better about choosing the correct volume control for pcm512x devices
+- A lot of code was moved from raat into rcore with some light API renames to faciliate reuse in other areas
+- Many other small bug fixes and stability improvements throughout the core RAAT infrastructure
+- More audio output plugin implementations (CoreAudio, ASIO, WASAPI) are available. 
+- More volume plugin implementations (CoreAudio, WASAPI)
+- Plugin implementations now propagate their configuration information back to Roon, to make debug/troubleshooting/certification simpler
+- Includes project files for building RAAT on Windows with VS2015
+
+1.0.18 (04/17/2016)
+- Added support for standby state and the request_standby method on the source selection plugin
+
+1.0.17 (04/05/2016)
+- Fixed bug in software volume that broke forwards compatibility with some 1.2 builds
+- Added support for "config_url" in raat_app and RAAT__Info
+
+1.0.16 (03/31/2016)
+- Fix some bugs in the script_buffer bindings to enable future performance optimizations
+- Support "max_pcm_rate" parameter on ALSA plugin
+
+1.0.15 (03/28/2016)
+- For devices with >2 channel input only, zero-pad the remaining channels
+
+1.0.14 (03/09/2016)
+- Add output delay to ALSA output plugin
+
+1.0.13 (03/09/2016)
+- Add sleep/retries to snd_pcm_hw_params and snd_pcm_prepare to work around bad USB Audio implementation on TEAC-UD501
+
+1.0.12 (02/29/2016)
+- Fix typo in performance monitoring interface
+
+1.0.11 (02/16/2016)
+- Fix arithmetic overflow when computing time position during ultra-high-resolution playback 
+
+1.0.10 (02/14/2016)
+- Wrote a documentation page for raat_app with some sample configurations
+- Wait for ALSA devices to become ready with 2s timeout instead of depending on snd_pcm_prepare to succeed immediately
+- Add missing S24_LE/S24_BE format support in the 24-bit w/o software volume case, for certain devices
+
+1.0.9 (02/06/2016)
+
+- RAAT supports non-integer volume ranges/values. This is a backwards compatible change
+- ALSA volume plugin interface allows volume plugins to communicate more information about dynamic range to Roon
+- ALSA volume plugin supports db-based volume controls with non-integer steps.
+
+1.0.8 (02/03/2016)
+
+- ALSA output plugin supports "dop_or_native" and "dcs_or_native" modes for devices that would rather use DoP instead of Native whenever possible
+
+1.0.7 (01/29/2016)
+
+- support for an alsa "watch" plugin, that exits when the device goes away
+- fix bug when capturing device info on hardware with multiple ALSA devices
+
+1.0.6 (01/06/2016)
+
+- ALSA Output: support for Native DSD when alsa-lib 1.0.29+ is present
+
+1.0.5 (01/06/2016)
+
+- ALSA Volume: Better auto-searching for mute controls
+
+1.0.4 (01/05/2016)
+
+- ALSA Output: fix crashes when using S24_LE/S24_BE formats
+- ALSA Volume: 'index' and 'name' configuration parameters are now optional (see docs for more info)
+- Software volume: default attenuation is now -100dB
+- RAAT__Info validation rejects empty value for unique_id
+
+1.0.2 (12/29/2015)
+
+- Add support for software-based volume control for PCM streams
+- Fixed bad format strings in null and ALSA output plugins
+- Fixed bad device ID string when probing ALSA devices for capabilities
+- Added <string.h> and <stdio.h> includes to raat_netutil.c 
+- Added changelog
+
+1.0.0 (11/07/2015)
+
+- Initial release

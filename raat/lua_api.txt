@@ -1,0 +1,55 @@
+===[ Buffer API ]===================================================================
+
+buffer.new(string)
+buffer.new(length)
+buffer.new()
+
+buf:position(pos)          set position
+buf:position()             get position
+buf:length(n)  
+buf:ensure_capacity(n)  
+buffer.is_little_endian      = true | false
+buffer.is_big_endian         = true | false
+buffer.pointer_size          = 4    | 8
+
+for XX in int8,uint8,({int16,int32,int64,uint16,uint32,uint64,float32,float64}_{le|be}) {
+     buf:write_XX(val);                
+     buf:set_XX(pos, val);
+     buf:get_XX(pos)                     => XX
+     buf:read_XX()                       => XX
+     buf:write_XX_array(arrayval);                          
+     buf:set_XX_array(pos, arrayval);
+     buf:get_XX_array(pos, n)            => table of XX
+     buf:read_XX_array(n)                => table of XX
+}
+
+buf:get_string(offset[, count])
+buf:set_string(dst_offset, str)   
+buf:set_string(dst_offset, str, count)
+buf:set_string(dst_offset, str, offset, count)
+buf:read_string(len)
+buf:write_string(string)
+buf:write_string(string, offset, count)
+
+buffer.copy(buf1, offset, buf2, offset, count)
+buffer.transform_copy(buf1, offset, buf2, offset, count, src_stride, dst_stride, { source_byte => dest_byte, ... })//
+
+===[ Session API ]===================================================================
+
+session.send_message(message_type, buffer)
+session.send_message(message_type, string)
+session.remote_address
+session.message_handlers.push(function(message_type, buffer) ... end)
+
+===[ Log API ]=======================================================================
+
+log.trace(...)
+log.debug(...)
+log.warning(...)
+log.error(...)
+log.critical(...)
+
+===[ Info API ]======================================================================
+
+XXX TODO
+

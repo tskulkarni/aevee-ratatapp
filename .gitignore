@@ -1,0 +1,12 @@
+bin
+obj
+default-target.mk
+.DS_Store
+docs/
+*.sdf
+Debug
+Release
+*.filters
+*.vs
+*.opendb
+
