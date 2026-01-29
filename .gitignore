@@ -9,4 +9,4 @@ Release
 *.filters
 *.vs
 *.opendb
-
+**/.vscode
