@@ -75,7 +75,8 @@ typedef struct {
 // file scope
 static int tty_fd;
 static struct termios tio;
-
+static  int pipe_fd;
+const char *volume_fifo = "/opt/Streamer/raat_fifo";
 // Prototypes
 void uart_init(void);
 
@@ -230,7 +231,10 @@ volume_bytes[0] = testCnt++;
              if(bytes_read > 0)
              {
                     volume = volume_bytes[bytes_read - 1];
-
+                    
+                    //Write the byte to the name pipe 
+                    write(pipe_fd, &volume, 1);
+                    
                     ////////////////////////////////////////
                     // (1) update the vars
                     // (2) generate a new RAAT__VolumeState
@@ -323,6 +327,7 @@ volume_bytes[0] = testCnt++;
 
 void uart_init(void)
 {
+    
         memset(&tio, 0, sizeof(tio));
         tio.c_iflag = 0;
         tio.c_oflag = 0;
@@ -335,6 +340,12 @@ void uart_init(void)
 
     tty_fd = open("/dev/ttyO1", O_RDWR | O_NONBLOCK);
     tcsetattr(tty_fd, TCSANOW, &tio);
+    //Also open the fifo
+    pipe_fd = open(volume_fifo, O_WRONLY);
+    if(pipe_fd<0)
+    {
+        RAAT__ERROR("Cannot open ipc fifo, volume data will not be passed..");
+    }
 }
 
 RC__Status
