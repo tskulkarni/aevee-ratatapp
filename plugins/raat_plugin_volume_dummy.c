@@ -23,6 +23,9 @@
 #include "rc_list.h"
 #include <uv.h>
 #include <errno.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 //////////
 // MACROS
@@ -53,6 +56,7 @@ uint8_t g_m1_state;
 void roon_signal_path(uint8_t);
 void (* roon_signal_path_ptr)(uint8_t) = NULL;
 
+
 /////////////////////
 // STRUCT DEFINITIONS
 /*
@@ -69,16 +73,31 @@ typedef struct {
     uv_thread_t                 tid;
     bool                        mute;
     double                      volume;
+    int                         volume_socket;
+    int                         volume_thread_running;
 } BricastiVolumePlugin;
 
 /////////////
 // file scope
 static int tty_fd;
 static struct termios tio;
-static  int pipe_fd;
-const char *volume_fifo = "/opt/Streamer/raat_fifo";
+
+
+//static callbacks 
+static void on_connect(uv_connect_t* connection, int status);
+static void alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
+static void read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf);
+static void on_write_data(uv_write_t* wreq, int status);
+
+
+
 // Prototypes
-void uart_init(void);
+void uart_init(BricastiVolumePlugin *self);
+int volume__manager_socket_connect(BricastiVolumePlugin *self);
+void volume_manager_write_socket(BricastiVolumePlugin *self,  uint8_t data);
+void  volume_manager_socket_ctl_init(BricastiVolumePlugin *self);
+void volume_manager_read_thread(void*arg);
+void process_volume_byte(BricastiVolumePlugin *self, uint8_t byte);
 
 static RC__Status volume_add_state_listener(void *vself, RAAT__VolumeStateCallback cb, void *userdata) {
     BricastiVolumePlugin *self = (BricastiVolumePlugin*)vself;
@@ -137,25 +156,15 @@ static RC__Status volume_get_state(void *vself, RAAT__VolumeState *out_state) {
 static RC__Status volume_set_volume(void *vself, double volume_value) {
     BricastiVolumePlugin *self = (BricastiVolumePlugin*)vself;
     RAAT__VolumeState state;
+    char volume_str[8];
     bool changed = false;
 
     uv_mutex_lock(&self->lock);
     if (self->volume != volume_value) {
         self->volume = volume_value;
         RAAT__TRACE("[volume/bricasti] volume => %f", volume_value);
-        // TODO: notify UART of volume state. Avoid doing any activity that takes more than ~100ms here, like blocking I/O.
-        //      If you have to do something that could possibly take longer, do it in a bg thread
-#if 1
-    // mcmurray -- write volume to DSP via UART
-    ssize_t tty_fd_wr;
-    uint8_t volume_byte = (int)(volume_value + 100); // was uint8_t volume_byte = (int)volume_value;
-//    tty_fd = open("/dev/ttyO1", O_RDWR | O_NONBLOCK);
-    {
-//        tcsetattr(tty_fd, TCSANOW, &tio);
-        tty_fd_wr = write(tty_fd, &volume_byte, 1);
-    }
-//    close(tty_fd);
-#endif
+        uint8_t volume_byte = (int)(volume_value + 100); 
+        volume_manager_write_socket(self,volume_byte);
         changed = true;
         LOCKED_get_state(self, &state);
     }
@@ -169,22 +178,16 @@ static RC__Status volume_set_volume(void *vself, double volume_value) {
 static RC__Status volume_set_mute(void *vself, bool mute_value) {
     BricastiVolumePlugin *self = (BricastiVolumePlugin*)vself;
     RAAT__VolumeState state;
+    char volume_str[8];
     bool changed = false;
 
     uv_mutex_lock(&self->lock);
     if (self->mute != mute_value) {
         self->mute = mute_value;
         RAAT__TRACE("[volume/bricasti] mute => %d", mute_value);
-        // TODO: notify UART of mute state. Avoid doing any activity that takes more than ~100ms here, like blocking I/O.
-        //       If you have to do something that could possibly take longer, do it in a bg thread
-
-       // update DSP with Roon mute status -- mcmurray
-		    ssize_t tty_fd_wr;
-		    uint8_t mute_byte;
-		    if(mute_value == true) mute_byte = STREAMER_MUTE_ON;
-		    else if(mute_value == false) mute_byte = STREAMER_MUTE_OFF;
-		    tty_fd_wr = write(tty_fd, &mute_byte, 1);
-
+        if(mute_value == true) mute_byte = STREAMER_MUTE_ON;
+		else if(mute_value == false) mute_byte = STREAMER_MUTE_OFF;
+        volume_manager_write_socket(self,mute_value);
         changed = true;
         LOCKED_get_state(self, &state);
     }
@@ -195,158 +198,7 @@ static RC__Status volume_set_mute(void *vself, bool mute_value) {
     return RC__STATUS_SUCCESS;
 }
 
-// mcmurray -- read volume from DSP via UART
-static void uart_read_thread(void*arg)
-{
-    BricastiVolumePlugin *self = arg;
-    uint8_t volume;
-    uint8_t volume_bytes[20];
-    ssize_t bytes_read;
 
-    // while (read from uart + plugin has not been deleted)
-    // TODO: read from UART. If you get a new value for volume or mute,
-    while(1)
-    {
-#if 1
-                // check UART to see if DSP has updated volume
-                //if( (tty_fd = open("/dev/ttyO1", O_RDWR | O_NONBLOCK)) > 0)
-//                if( (tty_fd = open("/dev/ttyO1", O_RDWR | O_NOCTTY)) > 0)
-                {
-//                        uart_init();
-//                      tcsetattr(tty_fd, TCSANOW, &tio);
-                        //lseek(tty_fd, -1, SEEK_END);
-                        bytes_read = read(tty_fd, volume_bytes, 20);
-RAAT__TRACE("BYTES => %d , ERRNO => %d", bytes_read, errno);
-//                        close(tty_fd);
-                }
-
-// TEST CODE -- start
-#if 0
-static uint8_t testCnt = 0;
-bytes_read = 1;
-volume_bytes[0] = testCnt++;
-#endif
-// TEST CODE -- end
-             // Get the latest volume level, if there is any
-             if(bytes_read > 0)
-             {
-                    volume = volume_bytes[bytes_read - 1];
-                    
-                    //Write the byte to the name pipe 
-                    write(pipe_fd, &volume, 1);
-                    
-                    ////////////////////////////////////////
-                    // (1) update the vars
-                    // (2) generate a new RAAT__VolumeState
-                    // (3) notify listeners of a state change
-
-                    RAAT__VolumeState state;
-                    uv_mutex_lock(&self->lock);
-
-                   // Check first, if we received a Mute related command and tell RAAT -- mcmurray
-                   if(volume == STREAMER_MUTE_ON) self->mute = true;
-                   else if(volume == STREAMER_MUTE_OFF) self->mute = false;
-		   else if(volume == STREAMER_STANDBY_ON || volume == STREAMER_SWITCH_REQ || volume == STREAMER_STANDBY_OFF)
-                   {
-                       g_m1_state = volume;
-                       (*m1_stdby_ptr)();
-                   }
-                   else if(volume == STREAMER_PHASE_INVERTED || volume == STREAMER_PHASE_NORMAL)
-                   {
-//                       roon_signal_path(volume);
-                         (*roon_signal_path_ptr)(volume);
-                   }
-                   else if(volume == STREAMER_UPSAMPLING_ACTIVE || volume == STREAMER_UPSAMPLING_INACTIVE)
-                   {
-                        (*roon_signal_path_ptr)(volume);
-                   }
-                   // Did we get a balance signal from SHARC  --                                                                                       
-                   else if(volume_bytes[bytes_read - 2] == STREAMER_BALANCE_PLUS)
-                   {
-                       // remove 0xC0 mask, send balance data
-                       uint8_t balance_data = volume - 0xC0;
-                       (*roon_signal_path_ptr)(balance_data);
-                   }
-                   else if(volume_bytes[bytes_read - 2] == STREAMER_BALANCE_MINUS)
-                   {
-                       // keep 0xC0 mask, send balance data
-                       uint8_t balance_data = volume;
-                       (*roon_signal_path_ptr)(balance_data);
-                   }
-                   else if(volume < 0x80)
-                    self->volume = volume - 100;  //was  self->volume = volume; /*NEW_VOLUME_FROM_UART*/0;
-                    //self->mute   = /*NEW_MUTE_FROM_UART*/false;
-
-#if 0   // Upsampling
- static int sample_rate_last = 0;
-
- // Has sample rate changed
- if(*g_sample_rate_ptr != sample_rate_last)
- {
-     //(*roon_signal_path_ptr)(STREAMER_UPSAMPLING_ACTIVE);    // Actual
-     (*roon_signal_path_ptr)(0);                             // test
-     sample_rate_last = *g_sample_rate_ptr;
- }
-#endif  // Upsampling
-
-                    /////////////////////////////////////////////////////////////////////////////
-                    // This is now a section that uses the polling to write to uart -- mcmurray
-                    /////////////////////////////////////////////////////////////////////////////
-#if 0		    // mcmurray
-                    uint8_t stdby_byte = STREAMER_STANDBY_ON;
-                    if(g_roon_stdby_flag == true)               // did M1 put us into Stdby -- mcmurray
-                    {
-                        write(tty_fd, &stdby_byte, 1);
-                        g_roon_stdby_flag = false;
-                    }
-#endif
-
-                    LOCKED_get_state(self, &state);
-                    uv_mutex_unlock(&self->lock);
-
-                    RAAT__volume_state_listeners_invoke(&self->state_listeners, &state);
-              }
-#endif
-
-                    /////////////////////////////////////////////////////////////////////////////
-                    // This is now a section that uses the polling to write to uart -- mcmurray
-                    /////////////////////////////////////////////////////////////////////////////
-#if 1
-                    uint8_t stdby_byte = STREAMER_STANDBY_ON;
-                    if(g_roon_stdby_flag == true)               // did M1 put us into Stdby -- mcmurray
-                    {
-                        write(tty_fd, &stdby_byte, 1);
-                        g_roon_stdby_flag = false;
-                    }
-#endif
-
-              // sleep for 250ms until it's time to poll uart again
-              usleep(250000);
-    }
-}
-
-void uart_init(void)
-{
-    
-        memset(&tio, 0, sizeof(tio));
-        tio.c_iflag = 0;
-        tio.c_oflag = 0;
-        tio.c_cflag = CS8|CREAD|CLOCAL;
-        tio.c_lflag = 0;
-        tio.c_cc[VMIN] = 0;     // MIN/TIME: 1/5,  0/0, 0/5
-        tio.c_cc[VTIME] = 0;
-        cfsetospeed(&tio, B115200);
-        cfsetispeed(&tio, B115200);
-
-    tty_fd = open("/dev/ttyO1", O_RDWR | O_NONBLOCK);
-    tcsetattr(tty_fd, TCSANOW, &tio);
-    //Also open the fifo
-    pipe_fd = open(volume_fifo, O_WRONLY);
-    if(pipe_fd<0)
-    {
-        RAAT__ERROR("Cannot open ipc fifo, volume data will not be passed..");
-    }
-}
 
 RC__Status
 RAAT__dummy_volume_plugin_new(RC__Allocator *alloc, RAAT__Device *device, json_t *config, RAAT__VolumePlugin **out_volume) {
@@ -362,7 +214,6 @@ RAAT__dummy_volume_plugin_new(RC__Allocator *alloc, RAAT__Device *device, json_t
     self->plugin.set_volume            = volume_set_volume;
     self->plugin.set_mute              = volume_set_mute;
 
-
     uv_mutex_init(&self->lock);
     RAAT__volume_state_listeners_init(&self->state_listeners, self->alloc);
 
@@ -371,8 +222,13 @@ RAAT__dummy_volume_plugin_new(RC__Allocator *alloc, RAAT__Device *device, json_t
     self->mute   = false;
 
     // kick off the background thread that reads from UART
-    uart_init();
-    uv_thread_create(&self->tid, uart_read_thread, self);
+    //uart_init(self);
+    if( volume__manager_socket_connect(self) ==0)
+    {
+        //uv_thread_create(&self->tid, uart_read_thread, self);
+        self->volume_thread_running=1;  
+        uv_thread_create(&self->tid, volume_manager_read_thread, self);
+    }
 
     self->config = json_deep_copy(config);
 
@@ -401,5 +257,131 @@ RAAT__bricasti_volume_plugin_delete(RAAT__VolumePlugin *volume) {
     uv_thread_join(&self->tid);         // this waits for the uart read thread to exit
 
     RC__free(self->alloc, self);
+}
+
+
+void volume_manager_socket_ctl_init(BricastiVolumePlugin *self)
+{
+    
+        volume__manager_socket_connect(self);
+
+    
+}
+
+ int volume__manager_socket_connect(BricastiVolumePlugin *self)
+{
+        struct sockaddr_in dest;
+        
+        memset(&dest, 0, sizeof(dest));
+        dest.sin_family = AF_INET;
+        dest.sin_port = htons(9000);
+        self->volume_socket = socket(AF_INET, SOCK_STREAM, 0);        
+        if (inet_pton(AF_INET, "127.0.0.1", &dest.sin_addr) <= 0) {
+            RAAT__ERROR("Connection to Volume Server Failed..");
+            close(self->volume_socket);
+            return -1;
+         }
+         if (connect(self->volume_socket, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
+            RAAT__ERROR("Connection to Volume Server Failed..");
+            close(self->volume_socket);
+            return -1;
+        }
+        return 0;
+}
+
+
+
+void volume_manager_write_socket(BricastiVolumePlugin *self,  uint8_t data)
+{
+    if (send(self->volume_socket, (char *)&data, 1, 0) < 0) {
+            RAAT__ERROR("Error Sending Data to Volume Server..");
+        }
+
+    
+}   
+
+
+void volume_manager_read_thread(void *arg)
+{
+    BricastiVolumePlugin *self = arg;
+    uint8_t volume;
+    uint8_t volume_bytes[20];
+    size_t bytes_read;
+
+    while(1) //(self->volume_thread_running)
+    {
+            
+        size_t bytes_read = recv(self->volume_socket, &volume_bytes, 1, 0);
+
+        if (bytes_read > 0) 
+        {
+            process_volume_byte(self,volume_bytes[0]);            
+        }
+        else if (bytes_read == 0) 
+        {   
+            RAAT__TRACE("Volume Server Closed Connection..");
+            self->volume_thread_running = 0;
+        } 
+        else 
+        {
+            RAAT__TRACE("Error: Unknown...");
+        }
+        usleep(250000);
+    }   
+}
+
+void process_volume_byte(BricastiVolumePlugin *self, uint8_t byte)
+{
+        uint8_t volume = byte;
+        
+        RAAT__VolumeState state;
+        uv_mutex_lock(&self->lock);
+        
+        //RAAT__TRACE("[RX] Received %d bytes: ", bytes_read);
+
+        if(volume == STREAMER_MUTE_ON) 
+        {
+            self->mute = true;
+        }
+        else if(volume == STREAMER_MUTE_OFF)
+        { 
+            self->mute = false;
+        }
+        else if(volume == STREAMER_STANDBY_ON || volume == STREAMER_SWITCH_REQ || volume == STREAMER_STANDBY_OFF)
+        {
+            g_m1_state = volume;
+            (*m1_stdby_ptr)();
+        }
+        else if(volume == STREAMER_PHASE_INVERTED || volume == STREAMER_PHASE_NORMAL)
+        {
+                (*roon_signal_path_ptr)(volume);
+        }
+        else if(volume == STREAMER_UPSAMPLING_ACTIVE || volume == STREAMER_UPSAMPLING_INACTIVE)
+        {
+            (*roon_signal_path_ptr)(volume);
+        }
+#if 0
+        // Did we get a balance signal from SHARC  --                                                                                       
+        else if(volume_bytes[bytes_read - 2] == STREAMER_BALANCE_PLUS)
+        {
+                    // remove 0xC0 mask, send balance data
+                uint8_t balance_data = volume - 0xC0;
+                (*roon_signal_path_ptr)(balance_data);
+        }
+        else if(volume_bytes[bytes_read - 2] == STREAMER_BALANCE_MINUS)
+        {
+            // keep 0xC0 mask, send balance data
+            uint8_t balance_data = volume;
+            (*roon_signal_path_ptr)(balance_data);
+        }
+#endif
+        else if(volume < 0x80)
+        {
+            self->volume = volume - 100;  //was  self->volume = volume; /*NEW_VOLUME_FROM_UART*/0;
+        }
+        LOCKED_get_state(self, &state);
+        uv_mutex_unlock(&self->lock);
+        RAAT__volume_state_listeners_invoke(&self->state_listeners, &state);
+
 }
 
