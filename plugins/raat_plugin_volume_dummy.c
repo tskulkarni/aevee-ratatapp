@@ -178,7 +178,7 @@ static RC__Status volume_set_volume(void *vself, double volume_value) {
 static RC__Status volume_set_mute(void *vself, bool mute_value) {
     BricastiVolumePlugin *self = (BricastiVolumePlugin*)vself;
     RAAT__VolumeState state;
-    char volume_str[8];
+    uint8_t mute_byte;
     bool changed = false;
 
     uv_mutex_lock(&self->lock);
