@@ -187,7 +187,7 @@ static RC__Status volume_set_mute(void *vself, bool mute_value) {
         RAAT__TRACE("[volume/bricasti] mute => %d", mute_value);
         if(mute_value == true) mute_byte = STREAMER_MUTE_ON;
 		else if(mute_value == false) mute_byte = STREAMER_MUTE_OFF;
-        volume_manager_write_socket(self,mute_value);
+        volume_manager_write_socket(self,mute_byte);
         changed = true;
         LOCKED_get_state(self, &state);
     }
@@ -360,21 +360,19 @@ void process_volume_byte(BricastiVolumePlugin *self, uint8_t byte)
         {
             (*roon_signal_path_ptr)(volume);
         }
-#if 0
-        // Did we get a balance signal from SHARC  --                                                                                       
-        else if(volume_bytes[bytes_read - 2] == STREAMER_BALANCE_PLUS)
+       // Did we get a balance signal from SHARC  --                                                                                       
+        else if(volume == STREAMER_BALANCE_PLUS)
         {
                     // remove 0xC0 mask, send balance data
                 uint8_t balance_data = volume - 0xC0;
                 (*roon_signal_path_ptr)(balance_data);
         }
-        else if(volume_bytes[bytes_read - 2] == STREAMER_BALANCE_MINUS)
+        else if(volume == STREAMER_BALANCE_MINUS)
         {
             // keep 0xC0 mask, send balance data
             uint8_t balance_data = volume;
             (*roon_signal_path_ptr)(balance_data);
         }
-#endif
         else if(volume < 0x80)
         {
             self->volume = volume - 100;  //was  self->volume = volume; /*NEW_VOLUME_FROM_UART*/0;
