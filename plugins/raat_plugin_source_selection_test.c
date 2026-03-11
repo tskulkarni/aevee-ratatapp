@@ -268,6 +268,34 @@ success:
     close(tty_fd);
 #endif
 
+    //Notify quboz 
+    FILE *q_pidfile = fopen("/run/quboz-aes.pid","r");
+    int q_pid;
+    if(q_pidfile != NULL){
+         if (fscanf(q_pidfile, "%d", &q_pid) == 1) {
+            kill(q_pid,SIGHUP);
+        }
+        else {
+            RAAT__TRACE("Could not read an integer from the file, or the file was empty.\n");
+        }
+        fclose(q_pidfile);
+    }
+    q_pidfile = NULL;
+    //Notify quboz 
+    q_pidfile = fopen("/run/quboz-usb.pid","r");
+    if(q_pidfile != NULL){
+         if (fscanf(q_pidfile, "%d", &q_pid) == 1) {
+            kill(q_pid,SIGHUP);
+        }
+        else {
+            RAAT__TRACE("Could not read an integer from the file, or the file was empty.\n");
+        }
+        fclose(q_pidfile);
+    }
+    
+    
+
+
 // Add delay to allow audio to start before having Roon switch
 if(roon_stdby_delay == true)  // delay only if in standby
 {
